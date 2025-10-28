@@ -1,0 +1,142 @@
+%{
+#define SDL_MAIN_HANDLED
+#include <stdio.h>
+#include "zoomjoystrong.h"
+
+#define WIDTH 1024
+#define HEIGHT 768
+
+int vars[26];
+int yylex(void);
+int yyerror(const char *s);
+%}
+
+%union {
+    int ival;
+    char var;
+}
+
+/* Token declarations */
+%token END END_STATEMENT POINT LINE CIRCLE RECTANGLE SET_COLOR
+%token EQUALS PLUS MINUS MULT DIV
+%type <ival> expr num
+%token <ival> INT
+%token <var> VARIABLE
+
+%%
+
+program:
+    statement_list END
+    ;
+
+statement_list:
+    statement_list statement
+    | /* empty */
+    ;
+
+statement:
+      point_command END_STATEMENT
+    | line_command END_STATEMENT
+    | circle_command END_STATEMENT
+    | rectangle_command END_STATEMENT
+    | set_color_command END_STATEMENT
+    | expression END_STATEMENT
+    ;
+
+point_command:
+    POINT INT INT {
+        if ($2 < 0 || $2 > WIDTH || $3 < 0 || $3 > HEIGHT) {
+            printf("Error: point coordinates (%d, %d) out of range (0–%d, 0–%d)\n",
+                   $2, $3, WIDTH, HEIGHT);
+        } else {
+            point($2, $3);
+        }
+    }
+    ;
+
+line_command:
+    LINE INT INT INT INT {
+        if ($2 < 0 || $2 > WIDTH || $3 < 0 || $3 > HEIGHT ||
+            $4 < 0 || $4 > WIDTH || $5 < 0 || $5 > HEIGHT) {
+            printf("Error: line endpoints out of range\n");
+        } else {
+            line($2, $3, $4, $5);
+        }
+    }
+    ;
+
+circle_command:
+    CIRCLE INT INT INT {
+        if ($4 <= 0) {
+            printf("Error: circle radius must be positive\n");
+        } else if ($2 - $4 < 0 || $2 + $4 > WIDTH || $3 - $4 < 0 || $3 + $4 > HEIGHT) {
+            printf("Error: circle out of bounds\n");
+        } else {
+            circle($2, $3, $4);
+        }
+    }
+    ;
+
+rectangle_command:
+    RECTANGLE INT INT INT INT {
+        if ($2 < 0 || $3 < 0 || $2 + $4 > WIDTH || $3 + $5 > HEIGHT) {
+            printf("Error: rectangle out of bounds\n");
+        } else {
+            rectangle($2, $3, $4, $5);
+        }
+    }
+    ;
+
+set_color_command:
+    SET_COLOR INT INT INT {
+        if ($2 < 0 || $2 > 255 || $3 < 0 || $3 > 255 || $4 < 0 || $4 > 255) {
+            printf("Error: invalid color values (%d, %d, %d). Must be 0–255.\n",
+                   $2, $3, $4);
+        } else {
+            set_color($2, $3, $4);
+        }
+    }
+    ;
+
+expression:
+    VARIABLE EQUALS expr {
+        int idx = $1 - 'A';
+        vars[idx] = $3;
+        printf("Variable %c = %d\n", $1, $3);
+    }
+    ;
+
+expr:
+      INT              { $$ = $1; }
+    | VARIABLE         {
+        int idx = $1 - 'A';
+        $$ = vars[idx];
+    }
+    | expr PLUS expr   { $$ = $1 + $3; }
+    | expr MINUS expr  { $$ = $1 - $3; }
+    | expr MULT expr   { $$ = $1 * $3; }
+    | expr DIV expr    {
+        if ($3 == 0) {
+            printf("Error: Division by zero\n");
+            $$ = 0;
+        } else {
+            $$ = $1 / $3;
+        }
+    }
+    ;
+
+%%
+
+int main(int argc, char *argv[]) {
+    setup();
+    yyparse();
+    finish();
+    return 0;
+}
+
+int yyerror(const char *s) {
+    fprintf(stderr, "Error: %s\n", s);
+    return 0;
+}
+
+
